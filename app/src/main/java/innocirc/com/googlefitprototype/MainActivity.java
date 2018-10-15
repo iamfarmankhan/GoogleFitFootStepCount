@@ -28,10 +28,13 @@ import com.google.android.gms.fitness.data.DataSet;
 import com.google.android.gms.fitness.data.DataSource;
 import com.google.android.gms.fitness.data.DataType;
 import com.google.android.gms.fitness.data.Field;
+import com.google.android.gms.fitness.data.Session;
 import com.google.android.gms.fitness.request.DataReadRequest;
+import com.google.android.gms.fitness.request.SessionReadRequest;
 import com.google.android.gms.fitness.result.DailyTotalResult;
 import com.google.android.gms.fitness.result.DataReadResponse;
 import com.google.android.gms.fitness.result.DataReadResult;
+import com.google.android.gms.fitness.result.SessionReadResponse;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -52,6 +55,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
     GoogleApiClient mClient;
     String total;
     String LOG_TAG = "InnoCirc";
+    String TAG = "InnoCirc";
     int GOOGLE_FIT_PERMISSIONS_REQUEST_CODE = 100;
     FitnessOptions fitnessOptions;
 
@@ -75,7 +79,8 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
 
     @Override
     public void onConnected(@Nullable Bundle bundle) {
-        new FetchStepsAsync().execute();
+       // new FetchStepsAsync().execute();
+        readSessionsApiAllSessions();
     }
 
     @Override
@@ -169,7 +174,7 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
 
             DataReadRequest readRequest = new DataReadRequest.Builder()
                     .aggregate(DataType.TYPE_STEP_COUNT_DELTA, DataType.AGGREGATE_STEP_COUNT_DELTA)
-                    .bucketByTime(1, TimeUnit.DAYS)
+                    .bucketByTime(1, TimeUnit.MICROSECONDS)
                     .setTimeRange(startTime, endTime, TimeUnit.MILLISECONDS)
                     .build();
 
@@ -209,21 +214,94 @@ public class MainActivity extends AppCompatActivity implements GoogleApiClient.C
         Log.e("History", "Data returned for Data type: " + dataSet.getDataType().getName());
         DateFormat dateFormat = DateFormat.getDateInstance();
         DateFormat timeFormat = DateFormat.getTimeInstance();
+        Log.d("Farman",String.valueOf(dataSet.getDataPoints().size()));
 
         for (DataPoint dp : dataSet.getDataPoints()) {
 
 
-            //Log.d("Farman", dp.getOriginalDataSource().getAppPackageName());
+            Log.d("Farman", dp.getOriginalDataSource().getAppPackageName());
+
 
 
             Log.e("History", "Data point:");
             Log.e("History", "\tType: " + dp.getDataType().getName());
             Log.e("History", "\tStart: " + dateFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)) + " " + timeFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
-            Log.e("History", "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)) + " " + timeFormat.format(dp.getStartTime(TimeUnit.MILLISECONDS)));
+            Log.e("History", "\tEnd: " + dateFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)) + " " + timeFormat.format(dp.getEndTime(TimeUnit.MILLISECONDS)));
             for (Field field : dp.getDataType().getFields()) {
+                Log.d("History",field.getName());
+
                 Log.e("History", "\tField: " + field.getName() +
                         " Value: " + dp.getValue(field));
             }
         }
     }
+
+
+
+    private SessionReadRequest readFitnessSession() {
+        Calendar cal = Calendar.getInstance();
+        Date now = new Date();
+        cal.setTime(now);
+        long endTime = cal.getTimeInMillis();
+        cal.add(Calendar.WEEK_OF_YEAR, -1);
+        long startTime = cal.getTimeInMillis();
+
+        // Build a session read request
+        SessionReadRequest readRequest = new SessionReadRequest.Builder()
+                .setTimeInterval(startTime, endTime, TimeUnit.MILLISECONDS)
+                .read(DataType.TYPE_STEP_COUNT_DELTA)
+                .readSessionsFromAllApps()
+                .build();
+        // [END build_read_session_request]
+
+        return readRequest;
+    }
+
+    private void readSessionsApiAllSessions() {
+
+        SessionReadRequest readRequest = readFitnessSession();
+
+        Fitness.getSessionsClient(MainActivity.this, GoogleSignIn.getLastSignedInAccount(MainActivity.this))
+                .readSession(readRequest)
+                .addOnSuccessListener(new OnSuccessListener<SessionReadResponse>() {
+                    @Override
+                    public void onSuccess(SessionReadResponse sessionReadResponse) {
+                        // Get a list of the sessions that match the criteria to check the result.
+                        List<Session> sessions = sessionReadResponse.getSessions();
+                        Log.i(TAG, "Session read was successful. Number of returned sessions is: "
+                                + sessions.size());
+
+                        for (Session session : sessions) {
+                            // Process the session
+                       //    dumpSession(session);
+
+                            // Process the data sets for this session
+                            List<DataSet> dataSets = sessionReadResponse.getDataSet(session);
+                            for (DataSet dataSet : dataSets) {
+                                showDataSet(dataSet);
+                            }
+                        }
+                    }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception e) {
+                        Log.i(TAG, "Failed to read session");
+                    }
+                });
+
+    }
+
+    private void dumpSession(Session session)
+    {
+        DateFormat dateFormat = DateFormat.getDateInstance();
+        DateFormat timeFormat = DateFormat.getTimeInstance();
+        Log.d("Farman",session.getActivity());
+        Log.d("Farman",dateFormat.format(session.getStartTime(TimeUnit.MICROSECONDS)));
+        Log.d("Farman",timeFormat.format(session.getStartTime(TimeUnit.MICROSECONDS)));
+    }
+
+
+
+
 }
